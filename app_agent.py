@@ -126,7 +126,7 @@ st.markdown("""
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header"><h1>🗑️ Agent Mékhé v1.1</h1><p>Mode Terrain | Connecté à Neon.tech</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>🗑️ Agent Mékhé v1.2</h1><p>Volume par Voyage | Mode Offline</p></div>', unsafe_allow_html=True)
 
 # ==================== CONNEXION BASE DE DONNÉES ====================
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -158,7 +158,7 @@ def get_equipes():
         return [(r[0], r[1]) for r in result]
 
 def enregistrer_point_collecte(tournee_id, point_data):
-    """Enregistre un point de collecte (sans volume)"""
+    """Enregistre un point de passage/collecte sans aucune donnée de volume"""
     try:
         if not verifier_connexion():
             st.session_state.sync_queue.append({"type": "point", "data": point_data, "tournee_id": tournee_id})
@@ -535,13 +535,15 @@ with tab2:
             col1, col2 = st.columns(2)
             with col1:
                 if st.session_state.gps_actif and st.session_state.position_actuelle:
-                    lat = st.number_input("Latitude", value=st.session_state.position_actuelle["lat"], format="%.6f")
-                    lon = st.number_input("Longitude", value=st.session_state.position_actuelle["lon"], format="%.6f")
+                    lat_val = st.session_state.position_actuelle["lat"]
+                    lon_val = st.session_state.position_actuelle["lon"]
                 else:
-                    lat = st.number_input("Latitude", value=15.115000, format="%.6f")
-                    lon = st.number_input("Longitude", value=-16.635000, format="%.6f")
+                    lat_val, lon_val = 15.115000, -16.635000
+                
+                lat = st.number_input("Latitude", value=lat_val, format="%.6f")
+                lon = st.number_input("Longitude", value=lon_val, format="%.6f")
             with col2:
-                description = st.text_area("Note / Localisation", placeholder="Ex: Devant la mosquée, angle rue...", height=80)
+                description = st.text_input("Note (ex: Rue X, Devant Boutique Y)", placeholder="Facultatif")
                 st.markdown(f"**Heure:** {datetime.now().strftime('%H:%M:%S')}")
             
             photo_file = st.file_uploader("📸 Photo (optionnel)", type=["jpg", "jpeg", "png"])
@@ -554,7 +556,7 @@ with tab2:
                     "heure": datetime.now(),
                     "lat": lat,
                     "lon": lon,
-                    "description": description,
+                    "description": description or "Point de collecte",
                     "photo": photo_file.getvalue() if photo_file else None,
                     "collecte_numero": 1
                 }
@@ -581,11 +583,11 @@ with tab2:
         
         # Section volume collecte 1
         st.markdown("---")
-        st.markdown('<div class="volume-box">📦 <strong>VOLUME TOTAL DU VOYAGE 1</strong><br>Saisissez le volume estimé pour ce voyage complet</div>', unsafe_allow_html=True)
+        st.markdown('<div class="volume-box">📦 <strong>BILAN VOYAGE 1</strong><br>Saisissez le volume total collecté lors de ce voyage</div>', unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
-            volume1 = st.number_input("Volume Voyage 1 (m³)", min_value=0.0, step=0.1, value=st.session_state.volume_collecte1)
+            volume1 = st.number_input("Volume total Voyage 1 (m³)", min_value=0.0, step=0.1, key="vol1")
         with col2:
             if st.button("💾 VALIDER VOLUME VOYAGE 1", use_container_width=True):
                 if volume1 > 0:
@@ -595,7 +597,7 @@ with tab2:
                             UPDATE tournees SET volume_collecte1 = :volume WHERE id = :tid
                         """), {"volume": volume1, "tid": st.session_state.tournee_en_cours})
                         conn.commit()
-                    st.success(f"✅ Volume Voyage 1 enregistré: {volume1:.1f} m³")
+                    st.success(f"✅ Volume enregistré : {volume1} m³")
                     st.session_state.etape_actuelle = "decharge1"
                 else:
                     st.warning("⚠️ Veuillez saisir un volume")
@@ -640,13 +642,15 @@ with tab3:
             col1, col2 = st.columns(2)
             with col1:
                 if st.session_state.gps_actif and st.session_state.position_actuelle:
-                    lat = st.number_input("Latitude", value=st.session_state.position_actuelle["lat"], format="%.6f")
-                    lon = st.number_input("Longitude", value=st.session_state.position_actuelle["lon"], format="%.6f")
+                    lat_val_2 = st.session_state.position_actuelle["lat"]
+                    lon_val_2 = st.session_state.position_actuelle["lon"]
                 else:
-                    lat = st.number_input("Latitude", value=15.115000, format="%.6f")
-                    lon = st.number_input("Longitude", value=-16.635000, format="%.6f")
+                    lat_val_2, lon_val_2 = 15.115000, -16.635000
+                
+                lat = st.number_input("Latitude", value=lat_val_2, format="%.6f")
+                lon = st.number_input("Longitude", value=lon_val_2, format="%.6f")
             with col2:
-                description = st.text_area("Note / Localisation", placeholder="Ex: Marché, Place centrale...", height=80)
+                description = st.text_input("Note (ex: Rue Z, Marché)", placeholder="Facultatif")
                 st.markdown(f"**Heure:** {datetime.now().strftime('%H:%M:%S')}")
             
             photo_file = st.file_uploader("📸 Photo (optionnel)", type=["jpg", "jpeg", "png"])
@@ -659,7 +663,7 @@ with tab3:
                     "heure": datetime.now(),
                     "lat": lat,
                     "lon": lon,
-                    "description": description,
+                    "description": description or "Point de collecte",
                     "photo": photo_file.getvalue() if photo_file else None,
                     "collecte_numero": 2
                 }
@@ -686,11 +690,11 @@ with tab3:
         
         # Section volume collecte 2
         st.markdown("---")
-        st.markdown('<div class="volume-box">📦 <strong>VOLUME TOTAL DU VOYAGE 2</strong><br>Saisissez le volume estimé pour ce voyage complet</div>', unsafe_allow_html=True)
+        st.markdown('<div class="volume-box">📦 <strong>BILAN VOYAGE 2</strong><br>Saisissez le volume total collecté lors de ce voyage</div>', unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
-            volume2 = st.number_input("Volume Voyage 2 (m³)", min_value=0.0, step=0.1, value=st.session_state.volume_collecte2)
+            volume2 = st.number_input("Volume total Voyage 2 (m³)", min_value=0.0, step=0.1, key="vol2")
         with col2:
             if st.button("💾 VALIDER VOLUME VOYAGE 2", use_container_width=True):
                 if volume2 > 0:
@@ -700,7 +704,7 @@ with tab3:
                             UPDATE tournees SET volume_collecte2 = :volume WHERE id = :tid
                         """), {"volume": volume2, "tid": st.session_state.tournee_en_cours})
                         conn.commit()
-                    st.success(f"✅ Volume Voyage 2 enregistré: {volume2:.1f} m³")
+                    st.success(f"✅ Volume enregistré : {volume2} m³")
                     st.session_state.etape_actuelle = "decharge2"
                 else:
                     st.warning("⚠️ Veuillez saisir un volume")
