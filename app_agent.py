@@ -505,28 +505,6 @@ with tab1:
             "lon": st.session_state.position_actuelle["lon"] if st.session_state.position_actuelle else None
         })
         st.success("✅ Point de collecte enregistré" + (" avec GPS" if st.session_state.position_actuelle else ""))
-        # Section 3: Décharge
-    st.markdown("---")
-    st.markdown("### 🏭 5. DÉCHARGE")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        heure_depart_decharge = st.time_input("Départ vers décharge", value=time(9, 45))
-    with col2:
-        heure_arrivee_decharge = st.time_input("Arrivée décharge", value=time(10, 15))
-    with col3:
-        heure_sortie_decharge = st.time_input("Sortie décharge", value=time(10, 45))
-    
-    if st.button("📍 Enregistrer passage décharge", key="btn_decharge", use_container_width=True):
-        st.session_state.points_gps.append({
-            "type": "decharge",
-            "heure": datetime.now().isoformat(),
-            "description": f"Passage à la décharge - {quartier_nom}",
-            "lat": st.session_state.position_actuelle["lat"] if st.session_state.position_actuelle else None,
-            "lon": st.session_state.position_actuelle["lon"] if st.session_state.position_actuelle else None
-        })
-        st.success("✅ Passage décharge enregistré" + (" avec GPS" if st.session_state.position_actuelle else ""))
-    
     
     # Section 5: Retour
     st.markdown("---")
