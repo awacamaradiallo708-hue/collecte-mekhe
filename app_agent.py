@@ -292,7 +292,7 @@ if 'positions_historique' not in st.session_state:
 # ==================== BARRE LATÉRALE ====================
 with st.sidebar:
     st.header("👤 Agent de collecte")
-    
+
     agent_nom_input = st.text_input("Votre nom complet", value=st.session_state.agent_nom, 
                                      placeholder="Ex: Alioune Diop")
     if agent_nom_input:
@@ -301,10 +301,10 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("### 📊 Récapitulatif")
-    
-    st.metric("📦 Volume Collecte 1", f"{st.session_state.volume_collecte1:.1f} m³")
-    st.metric("📦 Volume Collecte 2", f"{st.session_state.volume_collecte2:.1f} m³")
-    
+
+    st.metric("📦 Volume Voyage 1", f"{st.session_state.volume_collecte1:.1f} m³")
+    st.metric("📦 Volume Voyage 2", f"{st.session_state.volume_collecte2:.1f} m³")
+
     total_volume = st.session_state.volume_collecte1 + st.session_state.volume_collecte2
     st.metric("📊 Volume total", f"{total_volume:.1f} m³")
     
@@ -336,8 +336,8 @@ with st.sidebar:
 # ==================== ONGLETS ====================
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🚛 Nouvelle Tournée", 
-    "📍 Collecte 1 & Décharge 1", 
-    "📍 Collecte 2 & Décharge 2",
+    "📍 Voyage 1 (Points & Volume)", 
+    "📍 Voyage 2 (Points & Volume)",
     "📸 Photos",
     "📊 Résumé & Export",
     "🗺️ Carte GPS"
@@ -509,7 +509,7 @@ with tab1:
                         
                         conn.commit()
                     
-                    st.markdown('<div class="success-box">✅ Tournée démarrée ! Commencez la COLLECTE 1</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="success-box">✅ Tournée démarrée ! Enregistrez les points du VOYAGE 1</div>', unsafe_allow_html=True)
                     st.balloons()
                     
                 except Exception as e:
@@ -521,14 +521,14 @@ with tab1:
         st.info(f"🟢 Tournée en cours - ID: {st.session_state.tournee_en_cours}")
         st.info(f"📍 Étape: {st.session_state.etape_actuelle}")
 
-# ==================== ONGLET 2 : COLLECTE 1 & DÉCHARGE 1 ====================
+# ==================== ONGLET 2 : VOYAGE 1 ====================
 with tab2:
-    st.subheader("📍 COLLECTE 1 - Points de collecte")
+    st.subheader("📍 VOYAGE 1 - Points de passage")
     
     if not st.session_state.tournee_en_cours:
         st.warning("⚠️ Veuillez d'abord démarrer une tournée")
     else:
-        st.markdown('<div class="collecte-card">📍 COLLECTE 1 - Enregistrez tous les points d\'arrêt</div>', unsafe_allow_html=True)
+        st.markdown('<div class="collecte-card">📍 VOYAGE 1 - Marquez chaque arrêt de collecte (sans saisir de volume)</div>', unsafe_allow_html=True)
         
         # Formulaire d'ajout de point (SANS VOLUME)
         with st.form("form_point1", clear_on_submit=True):
@@ -541,7 +541,7 @@ with tab2:
                     lat = st.number_input("Latitude", value=15.115000, format="%.6f")
                     lon = st.number_input("Longitude", value=-16.635000, format="%.6f")
             with col2:
-                description = st.text_area("Description du point", placeholder="Ex: Devant la mosquée, devant l'école...", height=80)
+                description = st.text_area("Note / Localisation", placeholder="Ex: Devant la mosquée, angle rue...", height=80)
                 st.markdown(f"**Heure:** {datetime.now().strftime('%H:%M:%S')}")
             
             photo_file = st.file_uploader("📸 Photo (optionnel)", type=["jpg", "jpeg", "png"])
@@ -560,7 +560,7 @@ with tab2:
                 }
                 if enregistrer_point_collecte(st.session_state.tournee_en_cours, point_data):
                     st.session_state.points_collecte1.append(point_data)
-                    st.success(f"✅ Point {len(st.session_state.points_collecte1)} ajouté")
+                    st.success(f"✅ Point {len(st.session_state.points_collecte1)} enregistré")
                     st.rerun()
         
         # Afficher les points
@@ -581,13 +581,13 @@ with tab2:
         
         # Section volume collecte 1
         st.markdown("---")
-        st.markdown('<div class="volume-box">📦 <strong>VOLUME TOTAL COLLECTE 1</strong><br>Enregistrez le volume total après tous les points</div>', unsafe_allow_html=True)
+        st.markdown('<div class="volume-box">📦 <strong>VOLUME TOTAL DU VOYAGE 1</strong><br>Saisissez le volume estimé pour ce voyage complet</div>', unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
-            volume1 = st.number_input("Volume total Collecte 1 (m³)", min_value=0.0, step=0.5, value=st.session_state.volume_collecte1)
+            volume1 = st.number_input("Volume Voyage 1 (m³)", min_value=0.0, step=0.1, value=st.session_state.volume_collecte1)
         with col2:
-            if st.button("💾 ENREGISTRER VOLUME COLLECTE 1", use_container_width=True):
+            if st.button("💾 VALIDER VOLUME VOYAGE 1", use_container_width=True):
                 if volume1 > 0:
                     st.session_state.volume_collecte1 = volume1
                     with engine.connect() as conn:
@@ -595,7 +595,7 @@ with tab2:
                             UPDATE tournees SET volume_collecte1 = :volume WHERE id = :tid
                         """), {"volume": volume1, "tid": st.session_state.tournee_en_cours})
                         conn.commit()
-                    st.success(f"✅ Volume Collecte 1 enregistré: {volume1:.1f} m³")
+                    st.success(f"✅ Volume Voyage 1 enregistré: {volume1:.1f} m³")
                     st.session_state.etape_actuelle = "decharge1"
                 else:
                     st.warning("⚠️ Veuillez saisir un volume")
@@ -624,16 +624,16 @@ with tab2:
             else:
                 st.warning("⚠️ Activez le GPS pour enregistrer la position")
 
-# ==================== ONGLET 3 : COLLECTE 2 & DÉCHARGE 2 ====================
+# ==================== ONGLET 3 : VOYAGE 2 ====================
 with tab3:
-    st.subheader("📍 COLLECTE 2 - Points de collecte")
+    st.subheader("📍 VOYAGE 2 - Points de passage")
     
     if not st.session_state.tournee_en_cours:
         st.warning("⚠️ Veuillez d'abord démarrer une tournée")
     elif st.session_state.etape_actuelle not in ["collecte2", "decharge2"]:
-        st.info("ℹ️ Terminez d'abord la COLLECTE 1 et la DÉCHARGE 1")
+        st.info("ℹ️ Terminez d'abord le VOYAGE 1 et la décharge associée")
     else:
-        st.markdown('<div class="collecte-card">📍 COLLECTE 2 - Enregistrez tous les points d\'arrêt</div>', unsafe_allow_html=True)
+        st.markdown('<div class="collecte-card">📍 VOYAGE 2 - Marquez chaque arrêt de collecte (sans saisir de volume)</div>', unsafe_allow_html=True)
         
         # Formulaire d'ajout de point
         with st.form("form_point2", clear_on_submit=True):
@@ -646,7 +646,7 @@ with tab3:
                     lat = st.number_input("Latitude", value=15.115000, format="%.6f")
                     lon = st.number_input("Longitude", value=-16.635000, format="%.6f")
             with col2:
-                description = st.text_area("Description du point", placeholder="Ex: Devant le marché, place centrale...", height=80)
+                description = st.text_area("Note / Localisation", placeholder="Ex: Marché, Place centrale...", height=80)
                 st.markdown(f"**Heure:** {datetime.now().strftime('%H:%M:%S')}")
             
             photo_file = st.file_uploader("📸 Photo (optionnel)", type=["jpg", "jpeg", "png"])
@@ -686,13 +686,13 @@ with tab3:
         
         # Section volume collecte 2
         st.markdown("---")
-        st.markdown('<div class="volume-box">📦 <strong>VOLUME TOTAL COLLECTE 2</strong><br>Enregistrez le volume total après tous les points</div>', unsafe_allow_html=True)
+        st.markdown('<div class="volume-box">📦 <strong>VOLUME TOTAL DU VOYAGE 2</strong><br>Saisissez le volume estimé pour ce voyage complet</div>', unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
-            volume2 = st.number_input("Volume total Collecte 2 (m³)", min_value=0.0, step=0.5, value=st.session_state.volume_collecte2)
+            volume2 = st.number_input("Volume Voyage 2 (m³)", min_value=0.0, step=0.1, value=st.session_state.volume_collecte2)
         with col2:
-            if st.button("💾 ENREGISTRER VOLUME COLLECTE 2", use_container_width=True):
+            if st.button("💾 VALIDER VOLUME VOYAGE 2", use_container_width=True):
                 if volume2 > 0:
                     st.session_state.volume_collecte2 = volume2
                     with engine.connect() as conn:
@@ -700,7 +700,7 @@ with tab3:
                             UPDATE tournees SET volume_collecte2 = :volume WHERE id = :tid
                         """), {"volume": volume2, "tid": st.session_state.tournee_en_cours})
                         conn.commit()
-                    st.success(f"✅ Volume Collecte 2 enregistré: {volume2:.1f} m³")
+                    st.success(f"✅ Volume Voyage 2 enregistré: {volume2:.1f} m³")
                     st.session_state.etape_actuelle = "decharge2"
                 else:
                     st.warning("⚠️ Veuillez saisir un volume")
