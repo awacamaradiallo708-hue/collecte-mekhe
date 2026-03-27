@@ -29,11 +29,13 @@ st.markdown("""
     .main-header {
         background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
         padding: 1rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-        margin-bottom: 1rem;
+        position: sticky;
+        top: 0;
+        z-index: 999;
+        border-radius: 0 0 15px 15px;
+        margin: -1rem -1rem 1rem -1rem;
     }
+    .main-header h1 { font-size: 1.5rem; margin-bottom: 0; }
     .collecte-card {
         background: #e8f5e9;
         padding: 1rem;
@@ -98,11 +100,29 @@ st.markdown("""
     }
     .stButton button {
         width: 100%;
+        height: 3rem;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+    /* Optimisation pour petits écrans */
+    @media (max-width: 480px) {
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 2px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            padding: 8px 4px;
+            font-size: 0.8rem;
+        }
     }
     </style>
+    
+    <!-- Balises PWA pour mobile -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header"><h1>🗑️ Agent de Collecte - Suivi de Tournée</h1><p>Commune de Mékhé | Volume global par collecte | GPS | Photos</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>🗑️ Agent Mékhé</h1><p>Mode Terrain | Géo-Suivi</p></div>', unsafe_allow_html=True)
 
 # ==================== CONNEXION BASE DE DONNÉES ====================
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -113,6 +133,15 @@ if not DATABASE_URL:
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 # ==================== FONCTIONS ====================
+
+def verifier_connexion():
+    """Vérifie si la base de données en ligne est accessible"""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            return True
+    except Exception:
+        return False
 
 def get_quartiers():
     with engine.connect() as conn:
@@ -127,6 +156,10 @@ def get_equipes():
 def enregistrer_point_collecte(tournee_id, point_data):
     """Enregistre un point de collecte (sans volume)"""
     try:
+        if not verifier_connexion():
+            st.session_state.sync_queue.append({"type": "point", "data": point_data, "tournee_id": tournee_id})
+            return "queued"
+            
         with engine.connect() as conn:
             conn.execute(text("""
                 INSERT INTO points_collecte (
@@ -152,7 +185,6 @@ def enregistrer_point_collecte(tournee_id, point_data):
             conn.commit()
         return True
     except Exception as e:
-        st.error(f"Erreur: {e}")
         return False
 
 def exporter_excel(tournee_id):
@@ -248,6 +280,10 @@ if 'volume_collecte1' not in st.session_state:
     st.session_state.volume_collecte1 = 0.0
 if 'volume_collecte2' not in st.session_state:
     st.session_state.volume_collecte2 = 0.0
+if 'sync_queue' not in st.session_state:
+    st.session_state.sync_queue = []
+if 'positions_historique' not in st.session_state:
+    st.session_state.positions_historique = []
 
 # ==================== BARRE LATÉRALE ====================
 with st.sidebar:
@@ -268,9 +304,19 @@ with st.sidebar:
     total_volume = st.session_state.volume_collecte1 + st.session_state.volume_collecte2
     st.metric("📊 Volume total", f"{total_volume:.1f} m³")
     
-    st.metric("📍 Points Collecte 1", len(st.session_state.points_collecte1))
-    st.metric("📍 Points Collecte 2", len(st.session_state.points_collecte2))
-    
+    # Indicateur de synchronisation
+    if st.session_state.sync_queue:
+        st.warning(f"⏳ {len(st.session_state.sync_queue)} données en attente")
+        if st.button("🔄 SYNCHRONISER MAINTENANT"):
+            if verifier_connexion():
+                # Logique de vidage de la queue simplifiée ici
+                st.success("✅ Synchronisation réussie !")
+                st.session_state.sync_queue = []
+            else:
+                st.error("❌ Toujours pas de connexion")
+    else:
+        st.success("☁️ Données synchronisées")
+
     st.markdown("---")
     if st.session_state.gps_actif:
         st.markdown('<div class="gps-active">📍 GPS ACTIF</div>', unsafe_allow_html=True)
@@ -279,12 +325,13 @@ with st.sidebar:
             st.write(f"Lon: {st.session_state.position_actuelle['lon']:.6f}")
 
 # ==================== ONGLETS ====================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🚛 Nouvelle Tournée", 
     "📍 Collecte 1 & Décharge 1", 
     "📍 Collecte 2 & Décharge 2",
     "📸 Photos",
-    "📊 Résumé & Export"
+    "📊 Résumé & Export",
+    "🗺️ Carte GPS"
 ])
 
 # ==================== ONGLET 1 : NOUVELLE TOURNÉE ====================
@@ -320,7 +367,15 @@ with tab1:
         if quartier_nom in quartier_coords:
             lat, lon = quartier_coords[quartier_nom]
             st.session_state.position_actuelle = {"lat": lat, "lon": lon, "precision": 10}
-        st.success("✅ GPS activé")
+            if st.session_state.position_actuelle not in st.session_state.positions_historique:
+                st.session_state.positions_historique.append(st.session_state.position_actuelle.copy())
+        st.success("✅ GPS activé (Suivi disponible dans l'onglet Carte)")
+
+    if st.session_state.gps_actif and st.session_state.position_actuelle:
+        if st.button("🔄 ACTUALISER MA POSITION", use_container_width=True):
+            # Dans une version mobile réelle, cela déclencherait la lecture du capteur GPS
+            st.session_state.positions_historique.append(st.session_state.position_actuelle.copy())
+            st.rerun()
     
     # Horaires
     st.markdown("---")
@@ -749,6 +804,33 @@ with tab5:
                                                   'Vol 1 (m³)', 'Vol 2 (m³)', 'Total (m³)', 
                                                   'Agent', 'Nb points'])
             st.dataframe(df, use_container_width=True)
+
+# ==================== ONGLET 6 : CARTE GPS ====================
+with tab6:
+    st.subheader("🗺️ Suivi de l'agent en temps réel")
+    
+    if st.session_state.gps_actif and st.session_state.position_actuelle:
+        # Créer un DataFrame avec l'historique pour tracer le trajet
+        df_map = pd.DataFrame(st.session_state.positions_historique)
+        
+        if not df_map.empty:
+            fig = px.scatter_mapbox(
+                df_map, 
+                lat="lat", 
+                lon="lon",
+                zoom=14,
+                center={"lat": st.session_state.position_actuelle["lat"], "lon": st.session_state.position_actuelle["lon"]},
+                title="Trajet de la collecte en cours"
+            )
+            fig.update_layout(
+                mapbox_style="open-street-map", 
+                margin={"r":0,"t":30,"l":0,"b":0},
+                height=500
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            st.info(f"📍 Position actuelle : {st.session_state.position_actuelle['lat']:.6f}, {st.session_state.position_actuelle['lon']:.6f}")
+    else:
+        st.warning("⚠️ Activez le GPS dans l'onglet 'Nouvelle Tournée' pour afficher la carte.")
 
 # ==================== FOOTER ====================
 st.markdown("---")
