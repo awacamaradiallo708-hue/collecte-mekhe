@@ -117,12 +117,16 @@ st.markdown("""
     </style>
     
     <!-- Balises PWA pour mobile -->
+    <script>
+      // Petit script pour forcer le rafraîchissement si nécessaire
+      console.log("Interface Agent Mékhé v1.1 - Chargée");
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header"><h1>🗑️ Agent Mékhé</h1><p>Mode Terrain | Géo-Suivi</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>🗑️ Agent Mékhé v1.1</h1><p>Mode Terrain | Connecté à Neon.tech</p></div>', unsafe_allow_html=True)
 
 # ==================== CONNEXION BASE DE DONNÉES ====================
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -309,8 +313,13 @@ with st.sidebar:
         st.warning(f"⏳ {len(st.session_state.sync_queue)} données en attente")
         if st.button("🔄 SYNCHRONISER MAINTENANT"):
             if verifier_connexion():
-                # Logique de vidage de la queue simplifiée ici
-                st.success("✅ Synchronisation réussie !")
+                count = 0
+                for item in st.session_state.sync_queue:
+                    if item["type"] == "point":
+                        success = enregistrer_point_collecte(item["tournee_id"], item["data"])
+                        if success and success != "queued":
+                            count += 1
+                st.success(f"✅ {count} points synchronisés avec succès !")
                 st.session_state.sync_queue = []
             else:
                 st.error("❌ Toujours pas de connexion")
@@ -353,23 +362,26 @@ with tab1:
     st.markdown("---")
     st.markdown("### 📍 GÉOLOCALISATION")
     
-    if st.button("📍 ACTIVER LE GPS", key="gps_activate", use_container_width=True):
-        st.session_state.gps_actif = True
-        quartier_coords = {
-            "NDIOP": (15.121048, -16.686826),
-            "Lébou Est": (15.109558, -16.628958),
-            "Lébou Ouest": (15.098159, -16.619668),
-            "Ngaye Djitté": (15.115900, -16.632128),
-            "HLM": (15.117350, -16.635411),
-            "Mbambara": (15.115765, -16.632181),
-            "Ngaye Diagne": (15.120364, -16.635608)
-        }
-        if quartier_nom in quartier_coords:
-            lat, lon = quartier_coords[quartier_nom]
-            st.session_state.position_actuelle = {"lat": lat, "lon": lon, "precision": 10}
-            if st.session_state.position_actuelle not in st.session_state.positions_historique:
-                st.session_state.positions_historique.append(st.session_state.position_actuelle.copy())
-        st.success("✅ GPS activé (Suivi disponible dans l'onglet Carte)")
+    col_gps1, col_gps2 = st.columns(2)
+    with col_gps1:
+        if st.button("📍 ACTIVER LE GPS", key="gps_activate", use_container_width=True):
+            st.session_state.gps_actif = True
+            # Simulation initiale basée sur le quartier
+            quartier_coords = {
+                "NDIOP": (15.121048, -16.686826),
+                "Lébou Est": (15.109558, -16.628958),
+                "Lébou Ouest": (15.098159, -16.619668),
+                "Ngaye Djitté": (15.115900, -16.632128),
+                "HLM": (15.117350, -16.635411),
+                "Mbambara": (15.115765, -16.632181),
+                "Ngaye Diagne": (15.120364, -16.635608)
+            }
+            if quartier_nom in quartier_coords:
+                lat, lon = quartier_coords[quartier_nom]
+                st.session_state.position_actuelle = {"lat": lat, "lon": lon, "precision": 10}
+                if st.session_state.position_actuelle not in st.session_state.positions_historique:
+                    st.session_state.positions_historique.append(st.session_state.position_actuelle.copy())
+            st.success("✅ GPS prêt")
 
     if st.session_state.gps_actif and st.session_state.position_actuelle:
         if st.button("🔄 ACTUALISER MA POSITION", use_container_width=True):
