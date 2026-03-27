@@ -1,11 +1,11 @@
 """
 APPLICATION AGENT DE COLLECTE - COMMUNE DE MÉKHÉ
-Version avec :
-- 2 collectes
-- 2 passages à la décharge
-- Points de collecte dynamiques
+Version simplifiée :
+- Volume global par collecte (pas par point)
+- Points de collecte dynamiques sans volume
+- 2 collectes, 2 décharges
 - GPS intégré
-- Photos
+- Photos par point
 """
 
 import streamlit as st
@@ -14,6 +14,7 @@ import plotly.express as px
 from datetime import date, datetime, time, timedelta
 from sqlalchemy import create_engine, text
 import os
+from io import BytesIO
 
 st.set_page_config(
     page_title="Agent Collecte - Mékhé",
@@ -53,6 +54,17 @@ st.markdown("""
         border-radius: 8px;
         margin-bottom: 0.5rem;
         border-left: 3px solid #2E7D32;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .point-numero {
+        font-weight: bold;
+        background: #2E7D32;
+        color: white;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
     }
     .gps-active {
         background: #4CAF50;
@@ -76,13 +88,21 @@ st.markdown("""
         border-left: 4px solid #2196F3;
         margin: 1rem 0;
     }
+    .volume-box {
+        background: #fff8e7;
+        padding: 1rem;
+        border-radius: 10px;
+        border: 2px dashed #FF9800;
+        text-align: center;
+        margin: 1rem 0;
+    }
     .stButton button {
         width: 100%;
     }
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header"><h1>🗑️ Agent de Collecte - Suivi de Tournée</h1><p>Commune de Mékhé | 2 Collectes | 2 Décharges | GPS | Photos</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>🗑️ Agent de Collecte - Suivi de Tournée</h1><p>Commune de Mékhé | Volume global par collecte | GPS | Photos</p></div>', unsafe_allow_html=True)
 
 # ==================== CONNEXION BASE DE DONNÉES ====================
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -105,16 +125,16 @@ def get_equipes():
         return [(r[0], r[1]) for r in result]
 
 def enregistrer_point_collecte(tournee_id, point_data):
-    """Enregistre un point de collecte"""
+    """Enregistre un point de collecte (sans volume)"""
     try:
         with engine.connect() as conn:
             conn.execute(text("""
                 INSERT INTO points_collecte (
-                    tournee_id, point_numero, heure_passage, volume_m3, 
+                    tournee_id, point_numero, heure_passage, 
                     latitude, longitude, precision_gps, photo_data, 
                     description, collecte_numero
                 ) VALUES (
-                    :tid, :numero, :heure, :volume, 
+                    :tid, :numero, :heure, 
                     :lat, :lon, :precision, :photo, 
                     :desc, :collecte
                 )
@@ -122,7 +142,6 @@ def enregistrer_point_collecte(tournee_id, point_data):
                 "tid": tournee_id,
                 "numero": point_data["numero"],
                 "heure": point_data["heure"],
-                "volume": point_data["volume"],
                 "lat": point_data.get("lat"),
                 "lon": point_data.get("lon"),
                 "precision": point_data.get("precision", 0),
@@ -140,7 +159,6 @@ def exporter_excel(tournee_id):
     """Exporte une tournée en Excel"""
     try:
         with engine.connect() as conn:
-            # Récupérer la tournée
             tournee = conn.execute(text("""
                 SELECT 
                     t.*,
@@ -152,7 +170,6 @@ def exporter_excel(tournee_id):
                 WHERE t.id = :tid
             """), {"tid": tournee_id}).first()
             
-            # Récupérer les points
             points = conn.execute(text("""
                 SELECT * FROM points_collecte 
                 WHERE tournee_id = :tid 
@@ -161,46 +178,45 @@ def exporter_excel(tournee_id):
             
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # Résumé
                 resume = pd.DataFrame({
                     "Information": ["Date", "Quartier", "Équipe", "Agent", 
-                                   "Départ dépôt", "Début collecte 1", "Fin collecte 1",
-                                   "Départ décharge 1", "Arrivée décharge 1", "Sortie décharge 1",
-                                   "Début collecte 2", "Fin collecte 2",
-                                   "Départ décharge 2", "Arrivée décharge 2", "Sortie décharge 2",
-                                   "Retour dépôt", "Volume total", "Distance totale"],
+                                   "Départ dépôt",
+                                   "Collecte 1 - Volume", "Collecte 1 - Début", "Collecte 1 - Fin",
+                                   "Décharge 1 - Départ", "Décharge 1 - Arrivée", "Décharge 1 - Sortie",
+                                   "Collecte 2 - Volume", "Collecte 2 - Début", "Collecte 2 - Fin",
+                                   "Décharge 2 - Départ", "Décharge 2 - Arrivée", "Décharge 2 - Sortie",
+                                   "Retour dépôt", "Distance totale"],
                     "Valeur": [
                         tournee.date_tournee,
                         tournee.quartier,
                         tournee.equipe,
                         tournee.agent_nom,
                         tournee.heure_depot_depart,
+                        tournee.volume_collecte1 or 0,
                         tournee.heure_debut_collecte1,
                         tournee.heure_fin_collecte1,
                         tournee.heure_depart_decharge1,
                         tournee.heure_arrivee_decharge1,
                         tournee.heure_sortie_decharge1,
+                        tournee.volume_collecte2 or 0,
                         tournee.heure_debut_collecte2,
                         tournee.heure_fin_collecte2,
                         tournee.heure_depart_decharge2,
                         tournee.heure_arrivee_decharge2,
                         tournee.heure_sortie_decharge2,
                         tournee.heure_retour_depot,
-                        tournee.volume_m3,
                         tournee.distance_parcourue_km
                     ]
                 })
                 resume.to_excel(writer, sheet_name="Résumé", index=False)
                 
-                # Points de collecte
                 if points:
                     points_data = []
                     for p in points:
                         points_data.append({
                             "Collecte": p.collecte_numero,
-                            "N°": p.point_numero,
+                            "N° Point": p.point_numero,
                             "Heure": p.heure_passage,
-                            "Volume (m³)": p.volume_m3,
                             "Latitude": p.latitude,
                             "Longitude": p.longitude,
                             "Description": p.description
@@ -214,8 +230,10 @@ def exporter_excel(tournee_id):
         return None
 
 # ==================== SESSION STATE ====================
-if 'points_collecte' not in st.session_state:
-    st.session_state.points_collecte = []
+if 'points_collecte1' not in st.session_state:
+    st.session_state.points_collecte1 = []
+if 'points_collecte2' not in st.session_state:
+    st.session_state.points_collecte2 = []
 if 'gps_actif' not in st.session_state:
     st.session_state.gps_actif = False
 if 'position_actuelle' not in st.session_state:
@@ -225,11 +243,11 @@ if 'tournee_en_cours' not in st.session_state:
 if 'agent_nom' not in st.session_state:
     st.session_state.agent_nom = ""
 if 'etape_actuelle' not in st.session_state:
-    st.session_state.etape_actuelle = "depart"  # depart, collecte1, decharge1, collecte2, decharge2, retour
-if 'collecte1_points' not in st.session_state:
-    st.session_state.collecte1_points = []
-if 'collecte2_points' not in st.session_state:
-    st.session_state.collecte2_points = []
+    st.session_state.etape_actuelle = "depart"
+if 'volume_collecte1' not in st.session_state:
+    st.session_state.volume_collecte1 = 0.0
+if 'volume_collecte2' not in st.session_state:
+    st.session_state.volume_collecte2 = 0.0
 
 # ==================== BARRE LATÉRALE ====================
 with st.sidebar:
@@ -242,18 +260,18 @@ with st.sidebar:
         st.success(f"✅ Connecté: {agent_nom_input}")
     
     st.markdown("---")
-    st.markdown("### 📊 Statistiques")
+    st.markdown("### 📊 Récapitulatif")
     
-    total_volume = sum(p['volume'] for p in st.session_state.collecte1_points) + \
-                   sum(p['volume'] for p in st.session_state.collecte2_points)
-    st.metric("📦 Volume total", f"{total_volume:.1f} m³")
-    st.metric("📍 Points collecte 1", len(st.session_state.collecte1_points))
-    st.metric("📍 Points collecte 2", len(st.session_state.collecte2_points))
+    st.metric("📦 Volume Collecte 1", f"{st.session_state.volume_collecte1:.1f} m³")
+    st.metric("📦 Volume Collecte 2", f"{st.session_state.volume_collecte2:.1f} m³")
+    
+    total_volume = st.session_state.volume_collecte1 + st.session_state.volume_collecte2
+    st.metric("📊 Volume total", f"{total_volume:.1f} m³")
+    
+    st.metric("📍 Points Collecte 1", len(st.session_state.points_collecte1))
+    st.metric("📍 Points Collecte 2", len(st.session_state.points_collecte2))
     
     st.markdown("---")
-    st.markdown("### 🗺️ Informations")
-    st.markdown(f"**Date:** {date.today().strftime('%d/%m/%Y')}")
-    
     if st.session_state.gps_actif:
         st.markdown('<div class="gps-active">📍 GPS ACTIF</div>', unsafe_allow_html=True)
         if st.session_state.position_actuelle:
@@ -284,34 +302,35 @@ with tab1:
         quartier_nom = st.selectbox("📍 Quartier", [q[1] for q in get_quartiers()])
         nombre_voyages = st.number_input("🚛 Nombre de voyages", min_value=1, value=1, step=1)
     
-    # Section GPS
+    # GPS
     st.markdown("---")
     st.markdown("### 📍 GÉOLOCALISATION")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("📍 ACTIVER LE GPS", key="gps_activate", use_container_width=True):
-            st.session_state.gps_actif = True
-            quartier_coords = {
-                "NDIOP": (15.121048, -16.686826),
-                "Lébou Est": (15.109558, -16.628958),
-                "Lébou Ouest": (15.098159, -16.619668),
-                "Ngaye Djitté": (15.115900, -16.632128),
-                "HLM": (15.117350, -16.635411),
-                "Mbambara": (15.115765, -16.632181),
-                "Ngaye Diagne": (15.120364, -16.635608)
-            }
-            if quartier_nom in quartier_coords:
-                lat, lon = quartier_coords[quartier_nom]
-                st.session_state.position_actuelle = {"lat": lat, "lon": lon, "precision": 10}
-            st.success("✅ GPS activé")
+    if st.button("📍 ACTIVER LE GPS", key="gps_activate", use_container_width=True):
+        st.session_state.gps_actif = True
+        quartier_coords = {
+            "NDIOP": (15.121048, -16.686826),
+            "Lébou Est": (15.109558, -16.628958),
+            "Lébou Ouest": (15.098159, -16.619668),
+            "Ngaye Djitté": (15.115900, -16.632128),
+            "HLM": (15.117350, -16.635411),
+            "Mbambara": (15.115765, -16.632181),
+            "Ngaye Diagne": (15.120364, -16.635608)
+        }
+        if quartier_nom in quartier_coords:
+            lat, lon = quartier_coords[quartier_nom]
+            st.session_state.position_actuelle = {"lat": lat, "lon": lon, "precision": 10}
+        st.success("✅ GPS activé")
     
-    # Section horaires COMPLÈTE
+    # Horaires
     st.markdown("---")
     st.markdown("### 🕐 HORAIRES DE LA TOURNÉE")
     
-    st.markdown("#### 📍 DÉPART")
-    heure_depot_depart = st.time_input("Départ du dépôt", value=time(7, 0))
+    col1, col2 = st.columns(2)
+    with col1:
+        heure_depot_depart = st.time_input("🏭 Départ du dépôt", value=time(7, 0))
+    with col2:
+        distance_totale = st.number_input("📏 Distance totale (km)", min_value=0.0, step=0.5, value=25.0)
     
     st.markdown("#### 🗑️ COLLECTE 1")
     col1, col2 = st.columns(2)
@@ -348,10 +367,9 @@ with tab1:
     st.markdown("#### 🏁 RETOUR")
     heure_retour_depot = st.time_input("Retour au dépôt", value=time(14, 45))
     
-    distance_totale = st.number_input("📏 Distance totale parcourue (km)", min_value=0.0, step=0.5, value=25.0)
     observations = st.text_area("📝 Observations générales", height=80)
     
-    # Bouton pour démarrer
+    # Bouton démarrer
     if st.button("🚀 DÉMARRER LA TOURNÉE", type="primary", use_container_width=True):
         if not st.session_state.agent_nom:
             st.error("❌ Veuillez entrer votre nom")
@@ -417,14 +435,14 @@ with tab1:
                         
                         st.session_state.tournee_en_cours = result.fetchone()[0]
                         st.session_state.etape_actuelle = "collecte1"
-                        st.session_state.collecte1_points = []
-                        st.session_state.collecte2_points = []
-                        st.session_state.prochain_point1 = 1
-                        st.session_state.prochain_point2 = 1
+                        st.session_state.points_collecte1 = []
+                        st.session_state.points_collecte2 = []
+                        st.session_state.volume_collecte1 = 0.0
+                        st.session_state.volume_collecte2 = 0.0
                         
                         conn.commit()
                     
-                    st.markdown('<div class="success-box">✅ Tournée démarrée ! Commencez la collecte 1.</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="success-box">✅ Tournée démarrée ! Commencez la COLLECTE 1</div>', unsafe_allow_html=True)
                     st.balloons()
                     
                 except Exception as e:
@@ -434,7 +452,7 @@ with tab1:
     
     if st.session_state.tournee_en_cours:
         st.info(f"🟢 Tournée en cours - ID: {st.session_state.tournee_en_cours}")
-        st.info(f"📍 Étape actuelle: {st.session_state.etape_actuelle}")
+        st.info(f"📍 Étape: {st.session_state.etape_actuelle}")
 
 # ==================== ONGLET 2 : COLLECTE 1 & DÉCHARGE 1 ====================
 with tab2:
@@ -443,9 +461,9 @@ with tab2:
     if not st.session_state.tournee_en_cours:
         st.warning("⚠️ Veuillez d'abord démarrer une tournée")
     else:
-        st.markdown('<div class="collecte-card">📍 COLLECTE 1 - Ajoutez tous les points d\'arrêt pour la première collecte</div>', unsafe_allow_html=True)
+        st.markdown('<div class="collecte-card">📍 COLLECTE 1 - Enregistrez tous les points d\'arrêt</div>', unsafe_allow_html=True)
         
-        # Formulaire d'ajout de point
+        # Formulaire d'ajout de point (SANS VOLUME)
         with st.form("form_point1", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
@@ -455,20 +473,18 @@ with tab2:
                 else:
                     lat = st.number_input("Latitude", value=15.115000, format="%.6f")
                     lon = st.number_input("Longitude", value=-16.635000, format="%.6f")
-                volume = st.number_input("📦 Volume (m³)", min_value=0.0, step=0.5, value=0.0)
             with col2:
-                description = st.text_area("Description", placeholder="Ex: Devant la mosquée...", height=80)
+                description = st.text_area("Description du point", placeholder="Ex: Devant la mosquée, devant l'école...", height=80)
                 st.markdown(f"**Heure:** {datetime.now().strftime('%H:%M:%S')}")
             
-            photo_file = st.file_uploader("📸 Photo", type=["jpg", "jpeg", "png"])
+            photo_file = st.file_uploader("📸 Photo (optionnel)", type=["jpg", "jpeg", "png"])
             
             submitted = st.form_submit_button("✅ AJOUTER CE POINT", use_container_width=True)
             
-            if submitted and volume > 0:
+            if submitted:
                 point_data = {
-                    "numero": len(st.session_state.collecte1_points) + 1,
+                    "numero": len(st.session_state.points_collecte1) + 1,
                     "heure": datetime.now(),
-                    "volume": volume,
                     "lat": lat,
                     "lon": lon,
                     "description": description,
@@ -476,25 +492,46 @@ with tab2:
                     "collecte_numero": 1
                 }
                 if enregistrer_point_collecte(st.session_state.tournee_en_cours, point_data):
-                    st.session_state.collecte1_points.append(point_data)
-                    st.success(f"✅ Point {len(st.session_state.collecte1_points)} ajouté - {volume:.1f} m³")
+                    st.session_state.points_collecte1.append(point_data)
+                    st.success(f"✅ Point {len(st.session_state.points_collecte1)} ajouté")
                     st.rerun()
-            elif submitted:
-                st.warning("⚠️ Veuillez saisir un volume")
         
         # Afficher les points
-        if st.session_state.collecte1_points:
+        if st.session_state.points_collecte1:
             st.markdown("---")
             st.markdown("### 📋 Points de collecte 1")
-            for p in st.session_state.collecte1_points:
+            for p in st.session_state.points_collecte1:
                 st.markdown(f"""
                 <div class="point-card">
-                <strong>Point {p['numero']}</strong> - {p['heure'].strftime('%H:%M:%S')}<br>
-                📦 Volume: {p['volume']:.1f} m³<br>
-                📍 {p['lat']:.6f}, {p['lon']:.6f}<br>
-                📝 {p['description'][:100] if p['description'] else 'Pas de description'}
+                    <div>
+                        <span class="point-numero">Point {p['numero']}</span>
+                        <strong>{p['heure'].strftime('%H:%M:%S')}</strong>
+                    </div>
+                    <div>📍 {p['lat']:.6f}, {p['lon']:.6f}</div>
+                    <div>📝 {p['description'][:80] if p['description'] else 'Pas de description'}</div>
                 </div>
                 """, unsafe_allow_html=True)
+        
+        # Section volume collecte 1
+        st.markdown("---")
+        st.markdown('<div class="volume-box">📦 <strong>VOLUME TOTAL COLLECTE 1</strong><br>Enregistrez le volume total après tous les points</div>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            volume1 = st.number_input("Volume total Collecte 1 (m³)", min_value=0.0, step=0.5, value=st.session_state.volume_collecte1)
+        with col2:
+            if st.button("💾 ENREGISTRER VOLUME COLLECTE 1", use_container_width=True):
+                if volume1 > 0:
+                    st.session_state.volume_collecte1 = volume1
+                    with engine.connect() as conn:
+                        conn.execute(text("""
+                            UPDATE tournees SET volume_collecte1 = :volume WHERE id = :tid
+                        """), {"volume": volume1, "tid": st.session_state.tournee_en_cours})
+                        conn.commit()
+                    st.success(f"✅ Volume Collecte 1 enregistré: {volume1:.1f} m³")
+                    st.session_state.etape_actuelle = "decharge1"
+                else:
+                    st.warning("⚠️ Veuillez saisir un volume")
         
         # Section décharge 1
         st.markdown("---")
@@ -529,7 +566,7 @@ with tab3:
     elif st.session_state.etape_actuelle not in ["collecte2", "decharge2"]:
         st.info("ℹ️ Terminez d'abord la COLLECTE 1 et la DÉCHARGE 1")
     else:
-        st.markdown('<div class="collecte-card">📍 COLLECTE 2 - Ajoutez tous les points d\'arrêt pour la deuxième collecte</div>', unsafe_allow_html=True)
+        st.markdown('<div class="collecte-card">📍 COLLECTE 2 - Enregistrez tous les points d\'arrêt</div>', unsafe_allow_html=True)
         
         # Formulaire d'ajout de point
         with st.form("form_point2", clear_on_submit=True):
@@ -541,20 +578,18 @@ with tab3:
                 else:
                     lat = st.number_input("Latitude", value=15.115000, format="%.6f")
                     lon = st.number_input("Longitude", value=-16.635000, format="%.6f")
-                volume = st.number_input("📦 Volume (m³)", min_value=0.0, step=0.5, value=0.0)
             with col2:
-                description = st.text_area("Description", placeholder="Ex: Devant le marché...", height=80)
+                description = st.text_area("Description du point", placeholder="Ex: Devant le marché, place centrale...", height=80)
                 st.markdown(f"**Heure:** {datetime.now().strftime('%H:%M:%S')}")
             
-            photo_file = st.file_uploader("📸 Photo", type=["jpg", "jpeg", "png"])
+            photo_file = st.file_uploader("📸 Photo (optionnel)", type=["jpg", "jpeg", "png"])
             
             submitted = st.form_submit_button("✅ AJOUTER CE POINT", use_container_width=True)
             
-            if submitted and volume > 0:
+            if submitted:
                 point_data = {
-                    "numero": len(st.session_state.collecte2_points) + 1,
+                    "numero": len(st.session_state.points_collecte2) + 1,
                     "heure": datetime.now(),
-                    "volume": volume,
                     "lat": lat,
                     "lon": lon,
                     "description": description,
@@ -562,25 +597,46 @@ with tab3:
                     "collecte_numero": 2
                 }
                 if enregistrer_point_collecte(st.session_state.tournee_en_cours, point_data):
-                    st.session_state.collecte2_points.append(point_data)
-                    st.success(f"✅ Point {len(st.session_state.collecte2_points)} ajouté - {volume:.1f} m³")
+                    st.session_state.points_collecte2.append(point_data)
+                    st.success(f"✅ Point {len(st.session_state.points_collecte2)} ajouté")
                     st.rerun()
-            elif submitted:
-                st.warning("⚠️ Veuillez saisir un volume")
         
         # Afficher les points
-        if st.session_state.collecte2_points:
+        if st.session_state.points_collecte2:
             st.markdown("---")
             st.markdown("### 📋 Points de collecte 2")
-            for p in st.session_state.collecte2_points:
+            for p in st.session_state.points_collecte2:
                 st.markdown(f"""
                 <div class="point-card">
-                <strong>Point {p['numero']}</strong> - {p['heure'].strftime('%H:%M:%S')}<br>
-                📦 Volume: {p['volume']:.1f} m³<br>
-                📍 {p['lat']:.6f}, {p['lon']:.6f}<br>
-                📝 {p['description'][:100] if p['description'] else 'Pas de description'}
+                    <div>
+                        <span class="point-numero">Point {p['numero']}</span>
+                        <strong>{p['heure'].strftime('%H:%M:%S')}</strong>
+                    </div>
+                    <div>📍 {p['lat']:.6f}, {p['lon']:.6f}</div>
+                    <div>📝 {p['description'][:80] if p['description'] else 'Pas de description'}</div>
                 </div>
                 """, unsafe_allow_html=True)
+        
+        # Section volume collecte 2
+        st.markdown("---")
+        st.markdown('<div class="volume-box">📦 <strong>VOLUME TOTAL COLLECTE 2</strong><br>Enregistrez le volume total après tous les points</div>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            volume2 = st.number_input("Volume total Collecte 2 (m³)", min_value=0.0, step=0.5, value=st.session_state.volume_collecte2)
+        with col2:
+            if st.button("💾 ENREGISTRER VOLUME COLLECTE 2", use_container_width=True):
+                if volume2 > 0:
+                    st.session_state.volume_collecte2 = volume2
+                    with engine.connect() as conn:
+                        conn.execute(text("""
+                            UPDATE tournees SET volume_collecte2 = :volume WHERE id = :tid
+                        """), {"volume": volume2, "tid": st.session_state.tournee_en_cours})
+                        conn.commit()
+                    st.success(f"✅ Volume Collecte 2 enregistré: {volume2:.1f} m³")
+                    st.session_state.etape_actuelle = "decharge2"
+                else:
+                    st.warning("⚠️ Veuillez saisir un volume")
         
         # Section décharge 2
         st.markdown("---")
@@ -604,8 +660,7 @@ with tab3:
                 st.session_state.etape_actuelle = "retour"
                 
                 # Terminer la tournée
-                volume_total = sum(p['volume'] for p in st.session_state.collecte1_points) + \
-                               sum(p['volume'] for p in st.session_state.collecte2_points)
+                volume_total = st.session_state.volume_collecte1 + st.session_state.volume_collecte2
                 with engine.connect() as conn:
                     conn.execute(text("""
                         UPDATE tournees 
@@ -623,33 +678,37 @@ with tab3:
 with tab4:
     st.subheader("📸 Photos des points de collecte")
     
-    st.markdown("### Collecte 1")
-    for p in st.session_state.collecte1_points:
+    st.markdown("### 🗑️ COLLECTE 1")
+    for p in st.session_state.points_collecte1:
         if p.get("photo"):
-            st.image(p["photo"], caption=f"Point {p['numero']} - {p['volume']:.1f} m³", width=300)
+            st.image(p["photo"], caption=f"Point {p['numero']} - {p['description'][:50]}", width=300)
     
-    st.markdown("### Collecte 2")
-    for p in st.session_state.collecte2_points:
+    st.markdown("### 🗑️ COLLECTE 2")
+    for p in st.session_state.points_collecte2:
         if p.get("photo"):
-            st.image(p["photo"], caption=f"Point {p['numero']} - {p['volume']:.1f} m³", width=300)
+            st.image(p["photo"], caption=f"Point {p['numero']} - {p['description'][:50]}", width=300)
 
 # ==================== ONGLET 5 : RÉSUMÉ & EXPORT ====================
 with tab5:
     st.subheader("📊 Résumé de la tournée")
     
     if st.session_state.tournee_en_cours:
-        volume_total = sum(p['volume'] for p in st.session_state.collecte1_points) + \
-                       sum(p['volume'] for p in st.session_state.collecte2_points)
+        total_volume = st.session_state.volume_collecte1 + st.session_state.volume_collecte2
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("📦 Volume total", f"{volume_total:.1f} m³")
+            st.metric("📦 Volume Collecte 1", f"{st.session_state.volume_collecte1:.1f} m³")
         with col2:
-            st.metric("📍 Points Collecte 1", len(st.session_state.collecte1_points))
+            st.metric("📦 Volume Collecte 2", f"{st.session_state.volume_collecte2:.1f} m³")
         with col3:
-            st.metric("📍 Points Collecte 2", len(st.session_state.collecte2_points))
+            st.metric("📊 Volume total", f"{total_volume:.1f} m³")
         
-        # Export
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("📍 Points Collecte 1", len(st.session_state.points_collecte1))
+        with col2:
+            st.metric("📍 Points Collecte 2", len(st.session_state.points_collecte2))
+        
         if st.button("📥 EXPORTER CETTE TOURNÉE EN EXCEL", use_container_width=True):
             excel_data = exporter_excel(st.session_state.tournee_en_cours)
             if excel_data:
@@ -674,7 +733,9 @@ with tab5:
         tournees = conn.execute(text("""
             SELECT 
                 t.id, t.date_tournee, q.nom as quartier, e.nom as equipe,
-                t.volume_m3, t.agent_nom,
+                t.volume_collecte1, t.volume_collecte2,
+                (t.volume_collecte1 + t.volume_collecte2) as volume_total,
+                t.agent_nom,
                 (SELECT COUNT(*) FROM points_collecte WHERE tournee_id = t.id) as nb_points
             FROM tournees t
             JOIN quartiers q ON t.quartier_id = q.id
@@ -684,9 +745,11 @@ with tab5:
         """), {"debut": date_debut, "fin": date_fin}).fetchall()
         
         if tournees:
-            df = pd.DataFrame(tournees, columns=['ID', 'Date', 'Quartier', 'Équipe', 'Volume (m³)', 'Agent', 'Nb points'])
+            df = pd.DataFrame(tournees, columns=['ID', 'Date', 'Quartier', 'Équipe', 
+                                                  'Vol 1 (m³)', 'Vol 2 (m³)', 'Total (m³)', 
+                                                  'Agent', 'Nb points'])
             st.dataframe(df, use_container_width=True)
 
 # ==================== FOOTER ====================
 st.markdown("---")
-st.caption(f"📱 Interface agent - Commune de Mékhé | Agent: {st.session_state.agent_nom or 'Non connecté'} | 2 collectes | 2 décharges | GPS intégré")
+st.caption(f"📱 Interface agent - Commune de Mékhé | Agent: {st.session_state.agent_nom or 'Non connecté'} | Volume global par collecte | GPS intégré")
