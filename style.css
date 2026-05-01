@@ -1,0 +1,15 @@
+body {
+  font-family: Arial;
+  text-align: center;
+}
+
+#map {
+  height: 80vh;
+  margin-top: 10px;
+}
+
+button {
+  margin: 5px;
+  padding: 10px;
+  font-size: 14px;
+}
