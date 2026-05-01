@@ -1,106 +1,107 @@
+// ================= MODE =================
+function setMode(mode) {
+  document.getElementById("agentUI").style.display = (mode === "agent") ? "block" : "none";
+  document.getElementById("dashboardUI").style.display = (mode === "dashboard") ? "block" : "none";
+
+  if (mode === "dashboard") loadDashboard();
+}
+
+// ================= MAP =================
 let map = L.map('map').setView([15.11, -16.63], 13);
 
-// Fond de carte
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap'
-}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-// ==================== VARIABLES ====================
-let watchId = null;
-let path = [];
 let polyline = L.polyline([], {color: 'blue'}).addTo(map);
+let watchId = null;
 
-// ==================== GPS TRACKING ====================
+// ================= GPS =================
 function startTracking() {
-  if (!navigator.geolocation) {
-    alert("GPS non supporté");
-    return;
-  }
+  watchId = navigator.geolocation.watchPosition(pos => {
 
-  watchId = navigator.geolocation.watchPosition(position => {
-    let lat = position.coords.latitude;
-    let lon = position.coords.longitude;
+    let lat = pos.coords.latitude;
+    let lon = pos.coords.longitude;
 
-    let point = [lat, lon];
-    path.push(point);
+    polyline.addLatLng([lat, lon]);
+    map.setView([lat, lon]);
 
-    polyline.addLatLng(point);
+    saveLocal({lat, lon, type: "tracking"});
 
-    map.setView(point);
-
-    // Sauvegarde locale
-    saveLocal(point);
-
-  }, err => {
-    console.error(err);
-  }, {
-    enableHighAccuracy: true,
-    maximumAge: 1000
-  });
+  }, err => console.log(err), {enableHighAccuracy: true});
 }
 
 function stopTracking() {
-  if (watchId) {
-    navigator.geolocation.clearWatch(watchId);
-  }
+  navigator.geolocation.clearWatch(watchId);
 }
 
-// ==================== STOCKAGE LOCAL ====================
+// ================= POINTS =================
+function markPoint(type) {
+  navigator.geolocation.getCurrentPosition(pos => {
+
+    let lat = pos.coords.latitude;
+    let lon = pos.coords.longitude;
+
+    L.marker([lat, lon]).addTo(map).bindPopup(type);
+
+    saveLocal({lat, lon, type});
+
+  });
+}
+
+// ================= STOCKAGE =================
 function saveLocal(point) {
-  let data = JSON.parse(localStorage.getItem("trajet") || "[]");
+  let data = JSON.parse(localStorage.getItem("data") || "[]");
+
   data.push({
-    lat: point[0],
-    lon: point[1],
+    ...point,
+    quartier: document.getElementById("quartier").value,
+    agent: document.getElementById("agent_nom").value,
     time: new Date().toISOString()
   });
-  localStorage.setItem("trajet", JSON.stringify(data));
+
+  localStorage.setItem("data", JSON.stringify(data));
 }
 
-// ==================== SYNCHRONISATION ====================
-async function syncData() {
-  let data = JSON.parse(localStorage.getItem("trajet") || "[]");
+// ================= ITINÉRAIRES =================
+document.getElementById("quartier").addEventListener("change", function() {
 
-  if (data.length === 0) {
-    alert("Aucune donnée");
-    return;
-  }
+  let q = this.value.toLowerCase().replace(" ", "_");
 
-  try {
-    await fetch("https://ton-api.com/save", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(data)
-    });
+  fetch(`itineraires/${q}.geojson`)
+    .then(res => res.json())
+    .then(data => {
 
-    alert("Synchronisé !");
-    localStorage.removeItem("trajet");
-
-  } catch (e) {
-    alert("Erreur connexion");
-  }
-}
-
-// ==================== CHARGEMENT GEOJSON ====================
-document.getElementById("geojsonInput").addEventListener("change", function(e) {
-
-  const files = e.target.files;
-  let colors = ["red", "green", "orange", "purple", "black"];
-
-  for (let i = 0; i < files.length; i++) {
-    let reader = new FileReader();
-
-    reader.onload = function(event) {
-      let geojson = JSON.parse(event.target.result);
-
-      L.geoJSON(geojson, {
+      L.geoJSON(data, {
         style: {
-          color: colors[i % colors.length],
-          weight: 4,
-          dashArray: "5, 10"
+          color: "red",
+          dashArray: "5,10",
+          weight: 4
         }
       }).addTo(map);
-    };
 
-    reader.readAsText(files[i]);
-  }
+    });
 });
+
+// ================= DASHBOARD =================
+function loadDashboard() {
+
+  let data = JSON.parse(localStorage.getItem("data") || "[]");
+
+  let stats = {};
+
+  data.forEach(d => {
+    stats[d.quartier] = (stats[d.quartier] || 0) + 1;
+  });
+
+  let ctx = document.getElementById('chart');
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: Object.keys(stats),
+      datasets: [{
+        label: 'Points collectés',
+        data: Object.values(stats)
+      }]
+    }
+  });
+}
