@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Suivi Collecte Déchets</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<h2>🗑️ Suivi GPS - Collecte</h2>
+
+<button onclick="startTracking()">▶️ Démarrer</button>
+<button onclick="stopTracking()">⏹️ Arrêter</button>
+<button onclick="syncData()">🔄 Synchroniser</button>
+
+<input type="file" id="geojsonInput" multiple accept=".json,.geojson">
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
