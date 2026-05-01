@@ -1,27 +1,63 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Suivi Collecte Déchets</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Collecte Déchets - Mékhé</title>
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<h2>🗑️ Suivi GPS - Collecte</h2>
+<h2>🗑️ Collecte Déchets - Mékhé</h2>
 
-<button onclick="startTracking()">▶️ Démarrer</button>
-<button onclick="stopTracking()">⏹️ Arrêter</button>
-<button onclick="syncData()">🔄 Synchroniser</button>
+<!-- SWITCH MODE -->
+<div>
+  <button onclick="setMode('agent')">🧑‍🌾 Agent</button>
+  <button onclick="setMode('dashboard')">📊 Dashboard</button>
+</div>
 
-<input type="file" id="geojsonInput" multiple accept=".json,.geojson">
+<!-- ================= AGENT ================= -->
+<div id="agentUI">
 
-<div id="map"></div>
+  <div class="form-box">
+    <input type="text" id="agent_nom" placeholder="Nom agent">
+
+    <select id="quartier">
+      <option>HLM</option>
+      <option>NDIOP</option>
+      <option>LEBOU EST</option>
+      <option>NGAYE</option>
+    </select>
+
+    <select id="equipe">
+      <option>Équipe A</option>
+      <option>Équipe B</option>
+    </select>
+
+    <button onclick="startTracking()">▶️ Démarrer</button>
+    <button onclick="markPoint('depart')">📍 Départ</button>
+    <button onclick="markPoint('decharge')">🚛 Décharge</button>
+    <button onclick="stopTracking()">⏹️ Fin</button>
+  </div>
+
+  <div id="map"></div>
+
+</div>
+
+<!-- ================= DASHBOARD ================= -->
+<div id="dashboardUI" style="display:none">
+
+  <h3>📊 Statistiques</h3>
+
+  <canvas id="chart"></canvas>
+
+  <button onclick="loadDashboard()">🔄 Actualiser</button>
+
+</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="app.js"></script>
