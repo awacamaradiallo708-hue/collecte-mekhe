@@ -4,12 +4,17 @@ body {
 }
 
 #map {
-  height: 80vh;
+  height: 70vh;
   margin-top: 10px;
 }
 
-button {
-  margin: 5px;
+.form-box {
+  background: #f4f4f4;
   padding: 10px;
-  font-size: 14px;
+  border-radius: 10px;
+}
+
+button, select, input {
+  margin: 5px;
+  padding: 8px;
 }
